@@ -1,326 +1,278 @@
-
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Palm Panic - Quest 3 WebXR</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #000;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
-            color: white;
-        }
-        #ui-overlay {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            z-index: 10;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 2rem;
-            border-radius: 20px;
-            border: 2px solid #444;
-            max-width: 400px;
-        }
-        h1 { margin: 0 0 1rem; color: #ff3e3e; text-transform: uppercase; letter-spacing: 2px; }
-        p { line-height: 1.5; margin-bottom: 2rem; }
-        button {
-            background: #ff3e3e;
-            color: white;
-            border: none;
-            padding: 1rem 2rem;
-            font-size: 1.2rem;
-            font-weight: bold;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: transform 0.1s;
-        }
-        button:active { transform: scale(0.95); }
-        #score-board {
-            position: absolute;
-            top: 20px;
-            width: 100%;
-            text-align: center;
-            font-size: 2rem;
-            font-weight: bold;
-            pointer-events: none;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-            display: none;
-        }
-        #message-box {
-            position: absolute;
-            bottom: 10%;
-            width: 100%;
-            text-align: center;
-            font-size: 1.5rem;
-            color: #fff;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Palm Panic - Quest 3</title>
+
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        background: black;
+        font-family: Arial, sans-serif;
+        overflow: hidden;
+        color: white;
+    }
+
+    #ui-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        background: rgba(0,0,0,0.8);
+        z-index: 10;
+    }
+
+    #panel {
+        padding: 2rem;
+        border-radius: 16px;
+        background: rgba(0,0,0,0.85);
+        border: 2px solid #444;
+        max-width: 420px;
+    }
+
+    h1 {
+        color: #ff3e3e;
+        margin-bottom: 1rem;
+    }
+
+    button {
+        margin-top: 1rem;
+        padding: 1rem 2rem;
+        font-size: 1.2rem;
+        background: #ff3e3e;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+    }
+
+    #score-board {
+        position: absolute;
+        top: 20px;
+        width: 100%;
+        text-align: center;
+        font-size: 2rem;
+        display: none;
+        pointer-events: none;
+    }
+
+    #message-box {
+        position: absolute;
+        bottom: 10%;
+        width: 100%;
+        text-align: center;
+        font-size: 1.5rem;
+        opacity: 0;
+        transition: opacity 0.3s;
+        pointer-events: none;
+    }
+</style>
 </head>
+
 <body>
-    <div id="ui-overlay">
+
+<div id="ui-overlay">
+    <div id="panel">
         <h1>Palm Panic</h1>
         <p>
-            Objects are falling into your room!<br><br>
-            <span style="color: #4488ff; font-weight: bold;">BLUE</span> = Left Palm Only<br>
-            <span style="color: #ff4444; font-weight: bold;">RED</span> = Right Palm Only<br><br>
-            Catch with an open, upward palm. Using the wrong hand results in an <strong>instant fail</strong>.
+            Catch falling objects using the correct hand.<br><br>
+            <span style="color:#4488ff;">BLUE = LEFT HAND</span><br>
+            <span style="color:#ff4444;">RED = RIGHT HAND</span>
         </p>
         <button id="start-button">START GAME</button>
     </div>
+</div>
 
-    <div id="score-board">SCORE: 0</div>
-    <div id="message-box">WRONG HAND!</div>
+<div id="score-board">SCORE: 0</div>
+<div id="message-box"></div>
 
-    <!-- Three.js and WebXR -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-            }
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
+
+let scene, camera, renderer;
+let hand1, hand2;
+let fallingObjects = [];
+let score = 0;
+let gameActive = false;
+let spawnTimer = 0;
+let spawnInterval = 2000;
+
+const uiOverlay = document.getElementById("ui-overlay");
+const scoreBoard = document.getElementById("score-board");
+const messageBox = document.getElementById("message-box");
+const startButton = document.getElementById("start-button");
+
+init();
+
+function init() {
+    scene = new THREE.Scene();
+
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.xr.enabled = true;
+    renderer.xr.setReferenceSpaceType('local-floor');
+
+    document.body.appendChild(renderer.domElement);
+
+    const light = new THREE.HemisphereLight(0xffffff, 0x8888ff, 2);
+    scene.add(light);
+
+    const handFactory = new XRHandModelFactory();
+
+    hand1 = renderer.xr.getHand(0);
+    hand2 = renderer.xr.getHand(1);
+
+    hand1.add(handFactory.createHandModel(hand1, "mesh"));
+    hand2.add(handFactory.createHandModel(hand2, "mesh"));
+
+    scene.add(hand1);
+    scene.add(hand2);
+
+    startButton.onclick = startXR;
+    window.addEventListener("resize", onResize);
+}
+
+async function startXR() {
+    if (!navigator.xr) {
+        alert("WebXR not supported.");
+        return;
+    }
+
+    try {
+        const session = await navigator.xr.requestSession("immersive-vr", {
+            requiredFeatures: ["local-floor"],
+            optionalFeatures: ["hand-tracking", "dom-overlay"],
+            domOverlay: { root: document.body }
+        });
+
+        renderer.xr.setSession(session);
+        startGame();
+
+    } catch (err) {
+        console.error(err);
+        alert("Failed to start XR");
+    }
+}
+
+function startGame() {
+    uiOverlay.style.display = "none";
+    score = 0;
+    scoreBoard.innerText = "SCORE: 0";
+    scoreBoard.style.display = "block";
+    gameActive = true;
+    fallingObjects.length = 0;
+    renderer.setAnimationLoop(render);
+}
+
+function spawnObject() {
+    const left = Math.random() > 0.5;
+    const color = left ? 0x4488ff : 0xff4444;
+
+    const geo = new THREE.IcosahedronGeometry(0.06, 1);
+    const mat = new THREE.MeshStandardMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: 0.5
+    });
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(
+        (Math.random() - 0.5) * 0.6,
+        1.8,
+        -0.5
+    );
+
+    scene.add(mesh);
+
+    fallingObjects.push({
+        mesh,
+        target: left ? "left" : "right",
+        velocity: 0.008 + score * 0.0005
+    });
+}
+
+function render(time) {
+    if (!gameActive) return;
+
+    if (time - spawnTimer > spawnInterval) {
+        spawnObject();
+        spawnTimer = time;
+    }
+
+    for (let i = fallingObjects.length - 1; i >= 0; i--) {
+        const obj = fallingObjects[i];
+        obj.mesh.position.y -= obj.velocity;
+
+        const h1 = hand1.joints?.palm;
+        const h2 = hand2.joints?.palm;
+
+        const hit = checkHit(obj, h1, "left") || checkHit(obj, h2, "right");
+
+        if (hit === "fail") return endGame("WRONG HAND");
+        if (hit === "catch") continue;
+
+        if (obj.mesh.position.y < 0.1) {
+            endGame("MISSED!");
+            return;
         }
-    </script>
+    }
 
-    <script type="module">
-        import * as THREE from 'three';
-        import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
+    renderer.render(scene, camera);
+}
 
-        let scene, camera, renderer;
-        let hand1, hand2; 
-        let handModel1, handModel2;
-        let fallingObjects = [];
-        let score = 0;
-        let gameActive = false;
-        let spawnTimer = 0;
-        let spawnInterval = 2000; 
-        
-        const scoreBoard = document.getElementById('score-board');
-        const messageBox = document.getElementById('message-box');
-        const uiOverlay = document.getElementById('ui-overlay');
-        const startButton = document.getElementById('start-button');
+function checkHit(obj, joint, side) {
+    if (!joint) return null;
 
-        init();
+    const pos = new THREE.Vector3().setFromMatrixPosition(joint.matrixWorld);
+    const d = obj.mesh.position.distanceTo(pos);
 
-        function init() {
-            scene = new THREE.Scene();
+    if (d < 0.12) {
+        scene.remove(obj.mesh);
+        fallingObjects.splice(fallingObjects.indexOf(obj), 1);
 
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+        if (side !== obj.target) return "fail";
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.xr.enabled = true;
-            document.body.appendChild(renderer.domElement);
+        score++;
+        scoreBoard.innerText = `SCORE: ${score}`;
+        return "catch";
+    }
+    return null;
+}
 
-            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 3);
-            scene.add(light);
+function endGame(msg) {
+    gameActive = false;
+    messageBox.innerText = msg;
+    messageBox.style.opacity = 1;
 
-            const handModelFactory = new XRHandModelFactory();
+    setTimeout(() => {
+        uiOverlay.style.display = "flex";
+        messageBox.style.opacity = 0;
+    }, 1500);
+}
 
-            // Hand 0
-            hand1 = renderer.xr.getHand(0);
-            scene.add(hand1);
-            handModel1 = handModelFactory.createHandModel(hand1, "mesh");
-            hand1.add(handModel1);
+function onResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+</script>
 
-            // Hand 1
-            hand2 = renderer.xr.getHand(1);
-            scene.add(hand2);
-            handModel2 = handModelFactory.createHandModel(hand2, "mesh");
-            hand2.add(handModel2);
-
-            startButton.addEventListener('click', () => {
-                requestSession();
-            });
-
-            window.addEventListener('resize', onWindowResize);
-        }
-
-        async function requestSession() {
-            if (!navigator.xr) {
-                showMessage("WebXR not found in this browser.");
-                return;
-            }
-
-            // Try the most basic possible request first. 
-            // In some desktop/simulator environments, 'immersive-ar' or 'hand-tracking' 
-            // as required features can trigger rejection if they are strictly unavailable.
-            
-            const sessionModes = ['immersive-ar', 'immersive-vr'];
-            
-            for (const mode of sessionModes) {
-                try {
-                    const isSupported = await navigator.xr.isSessionSupported(mode);
-                    if (isSupported) {
-                        // Request without requiredFeatures to avoid strict configuration rejection.
-                        // Hand tracking is moved to optionalFeatures.
-                        const session = await navigator.xr.requestSession(mode, {
-                            optionalFeatures: ['hand-tracking', 'local-floor']
-                        });
-                        renderer.xr.setSession(session);
-                        startGame();
-                        return;
-                    }
-                } catch (e) {
-                    console.warn(`Mode ${mode} failed:`, e);
-                }
-            }
-
-            showMessage("Could not start XR: Session configuration not supported.");
-        }
-
-        function startGame() {
-            uiOverlay.style.display = 'none';
-            scoreBoard.style.display = 'block';
-            score = 0;
-            scoreBoard.innerText = `SCORE: ${score}`;
-            gameActive = true;
-            spawnInterval = 2000;
-            
-            fallingObjects.forEach(obj => scene.remove(obj.mesh));
-            fallingObjects = [];
-            
-            renderer.setAnimationLoop(render);
-        }
-
-        function spawnObject() {
-            const isLeftTarget = Math.random() > 0.5; 
-            const color = isLeftTarget ? 0x4488ff : 0xff4444;
-            
-            const geometry = new THREE.IcosahedronGeometry(0.06, 1);
-            const material = new THREE.MeshStandardMaterial({ 
-                color: color, 
-                emissive: color,
-                emissiveIntensity: 0.5,
-                metalness: 0.7,
-                roughness: 0.2
-            });
-            const mesh = new THREE.Mesh(geometry, material);
-
-            const angle = (Math.random() - 0.5) * Math.PI * 0.5;
-            const distance = 0.5 + Math.random() * 0.3;
-            mesh.position.set(
-                Math.sin(angle) * distance,
-                1.8, 
-                -Math.cos(angle) * distance
-            );
-
-            scene.add(mesh);
-            fallingObjects.push({
-                mesh: mesh,
-                targetHand: isLeftTarget ? 'left' : 'right',
-                velocity: 0.008 + (score * 0.0005) 
-            });
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        function showMessage(text, color = "#fff") {
-            messageBox.innerText = text;
-            messageBox.style.color = color;
-            messageBox.style.opacity = 1;
-            setTimeout(() => {
-                messageBox.style.opacity = 0;
-            }, 2500);
-        }
-
-        function checkCollision(obj, hand, handType) {
-            // Check if hand data is available (some environments may fall back to standard controllers)
-            const palmJoint = hand.joints ? hand.joints['palm'] : null;
-            
-            let handPos = new THREE.Vector3();
-            if (palmJoint && palmJoint.visible) {
-                handPos.setFromMatrixPosition(palmJoint.matrixWorld);
-            } else {
-                // Controller/Wrist fallback
-                handPos.setFromMatrixPosition(hand.matrixWorld);
-            }
-
-            const dist = obj.mesh.position.distanceTo(handPos);
-
-            if (dist < 0.12) { 
-                if (obj.targetHand === handType) {
-                    score++;
-                    scoreBoard.innerText = `SCORE: ${score}`;
-                    spawnInterval = Math.max(700, 2000 - (score * 40));
-                    return 'catch';
-                } else {
-                    return 'fail';
-                }
-            }
-            return 'none';
-        }
-
-        function gameOver(reason) {
-            gameActive = false;
-            showMessage(reason, "#ff4444");
-            
-            setTimeout(() => {
-                uiOverlay.style.display = 'block';
-                uiOverlay.querySelector('h1').innerText = "GAME OVER";
-                uiOverlay.querySelector('p').innerHTML = `Final Score: ${score}<br><br>${reason}`;
-                startButton.innerText = "RETRY";
-            }, 2000);
-        }
-
-        function render(timestamp, frame) {
-            if (!gameActive) {
-                renderer.render(scene, camera);
-                return;
-            }
-
-            if (timestamp - spawnTimer > spawnInterval) {
-                spawnObject();
-                spawnTimer = timestamp;
-            }
-
-            const h1Type = hand1.handedness || 'left';
-            const h2Type = hand2.handedness || 'right';
-
-            for (let i = fallingObjects.length - 1; i >= 0; i--) {
-                const obj = fallingObjects[i];
-                obj.mesh.position.y -= obj.velocity;
-                obj.mesh.rotation.x += 0.02;
-                obj.mesh.rotation.z += 0.01;
-
-                const res1 = checkCollision(obj, hand1, h1Type);
-                const res2 = checkCollision(obj, hand2, h2Type);
-
-                if (res1 === 'fail' || res2 === 'fail') {
-                    scene.remove(obj.mesh);
-                    fallingObjects.splice(i, 1);
-                    gameOver("WRONG HAND!");
-                    return;
-                }
-
-                if (res1 === 'catch' || res2 === 'catch') {
-                    scene.remove(obj.mesh);
-                    fallingObjects.splice(i, 1);
-                    continue;
-                }
-
-                if (obj.mesh.position.y < 0.1) {
-                    scene.remove(obj.mesh);
-                    fallingObjects.splice(i, 1);
-                    gameOver("OBJECT DROPPED!");
-                    return;
-                }
-            }
-
-            renderer.render(scene, camera);
-        }
-    </script>
 </body>
 </html>
